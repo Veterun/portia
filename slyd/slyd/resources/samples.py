@@ -6,7 +6,7 @@ from slybot.validation.schema import get_schema_validator
 from .models import SampleSchema, HtmlSchema
 from .utils import (_load_sample, _create_schema, _get_formatted_schema,
                     _process_annotations, _add_items_and_annotations,
-                    _handle_sample_updates, SLYBOT_VERSION)
+                    _handle_sample_updates, sample_uses_js, SLYBOT_VERSION)
 from ..errors import BadRequest
 from ..utils.projects import ctx, gen_id
 
@@ -54,6 +54,12 @@ def update_sample(manager, spider_id, sample_id, attributes):
     attributes = _check_sample_attributes(attributes)
     sample = _load_sample(manager, spider_id, sample_id)
     sample.update(attributes)
+    if 'rendered_body' in sample:
+        spider = manager.resource('spiders', spider_id)
+        if sample_uses_js(spider, sample):
+            sample['body'] = 'rendered_body'
+        else:
+            sample['body'] = 'original_body'
     get_schema_validator('template').validate(sample)
     manager.savejson(sample, ['spiders', spider_id, sample_id])
     return _process_sample(sample, manager, spider_id)

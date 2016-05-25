@@ -9,6 +9,7 @@ const Sample = DS.Model.extend({
     scrapes: DS.attr('string'),
     spider: DS.belongsTo(),
     items: DS.hasMany(),
+    body: DS.attr('string'),
 
     orderedAnnotations: Ember.computed('items.content.@each.orderedAnnotations', function() {
         return [].concat(...this.get('items').mapBy('orderedAnnotations'));
