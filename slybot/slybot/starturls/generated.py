@@ -1,6 +1,6 @@
-import six
-
 from itertools import product
+
+import six
 
 
 class GeneratedUrl(object):
@@ -18,7 +18,10 @@ class GeneratedUrl(object):
         processor = getattr(self, '_process_{}'.format(fragment['type']))
         return processor(fragment['value'])
 
+    def process_fragments(self, spec):
+        return map(self._process_fragment, spec['fragments'])
+
     def __call__(self, spec):
-        generated = product(*map(self._process_fragment, spec['fragments']))
+        generated = product(*self.process_fragments(spec))
         for fragment_list in generated:
             yield ''.join(fragment_list)

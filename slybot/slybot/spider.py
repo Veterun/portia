@@ -1,26 +1,30 @@
 from __future__ import absolute_import
+
+import itertools
 import json
-import six
 
 from copy import deepcopy
-import itertools
-from six.moves.urllib_parse import urlparse
-
-from w3lib.http import basic_auth_header
-
-from scrapy.http import Request, HtmlResponse, XmlResponse, FormRequest
-from scrapy.spiders.sitemap import SitemapSpider
-from scrapy.utils.spider import arg_to_iter
 
 from loginform import fill_login_form
 
-from slybot.utils import (
-    iter_unique_scheme_hostname, load_plugins, load_plugin_names, IndexedDict,
-    include_exclude_filter
-)
-from slybot.linkextractor import create_linkextractor_from_specs
-from slybot.starturls import StartUrls, UrlGenerator, GeneratedUrl, StartUrlCollection
+from scrapy.http import FormRequest, HtmlResponse, Request, XmlResponse
+from scrapy.spiders.sitemap import SitemapSpider
+from scrapy.utils.spider import arg_to_iter
+
+import six
+from six.moves.urllib_parse import urlparse
+
 from slybot.generic_form import GenericForm
+from slybot.linkextractor import create_linkextractor_from_specs
+from slybot.starturls import (
+    GeneratedUrl, StartUrlCollection, StartUrls, UrlGenerator
+)
+from slybot.utils import (
+    include_exclude_filter, IndexedDict, iter_unique_scheme_hostname,
+    load_plugin_names, load_plugins,
+)
+from w3lib.http import basic_auth_header
+
 STRING_KEYS = ['start_urls', 'exclude_patterns', 'follow_patterns',
                'allowed_domains', 'js_enabled', 'js_enable_patterns',
                'js_disable_patterns']
@@ -35,7 +39,7 @@ class IblSpider(SitemapSpider):
 
             'url': StartUrls(),
             'generated': GeneratedUrl(),
-            #'feed_urls': FeedUrls(self, settings, kw)
+            # 'feed_urls': FeedUrls(self, settings, kw)
         }
         self.generic_form = GenericForm(**kw)
         super(IblSpider, self).__init__(name, **kw)
@@ -44,9 +48,10 @@ class IblSpider(SitemapSpider):
         self.plugins = self._configure_plugins(
             settings, spec, item_schemas, all_extractors)
         self._configure_js(spec, settings)
-        self.login_requests, self.form_requests = [], []
-        self._start_requests = self._create_start_urls(spec)
 
+        self.login_requests, self.form_requests = [], []
+        self._start_urls = self._create_start_urls(spec)
+        self._start_requests = self._create_start_requests(spec)
         self._create_init_requests(spec)
         self._add_allowed_domains(spec)
         self.page_actions = spec.get('page_actions', [])
@@ -58,30 +63,24 @@ class IblSpider(SitemapSpider):
             spec[key] = val
 
     def _create_start_urls(self, spec):
-        def start_urls():
-            init_requests = spec.get('init_requests', [])
-            for rdata in init_requests:
-                if rdata["type"] == "start":
-                    yield self._create_start_request_from_specs(rdata)
+        url_type = spec.get('start_urls_type', 'start_urls')
+        return StartUrlCollection(
+            arg_to_iter(spec[url_type]),
+            self.start_url_generators,
+            url_type
+        )
 
-            url_type = spec.get('start_urls_type', 'start_urls')
+    def _create_start_requests(self, spec):
+        init_requests = spec.get('init_requests', [])
+        for rdata in init_requests:
+            if rdata["type"] == "start":
+                yield self._create_start_request_from_specs(rdata)
 
-            start_urls = StartUrlCollection(
-                arg_to_iter(spec[url_type]),
-                self.start_url_generators,
-                url_type
-            )
-            for start_url in start_urls:
-                if not isinstance(start_url, Request):
-                    start_url = Request(start_url, callback=self.parse,
-                                        dont_filter=True)
-                yield self._add_splash_meta(start_url)
-        return start_urls
-
-    def _add_allowed_domains(self, spec):
-        self.allowed_domains = spec.get('allowed_domains', [])
-        if self.allowed_domains is not None and not self.allowed_domains:
-            self.allowed_domains = self._get_allowed_domains(spec['templates'])
+        for start_url in self._start_urls:
+            if not isinstance(start_url, Request):
+                start_url = Request(start_url, callback=self.parse,
+                                    dont_filter=True)
+            yield self._add_splash_meta(start_url)
 
     def _create_init_requests(self, spec):
         init_requests = spec.get('init_requests', [])
@@ -97,6 +96,11 @@ class IblSpider(SitemapSpider):
                     self.get_generic_form_start_request(rdata)
                 )
 
+    def _add_allowed_domains(self, spec):
+        self.allowed_domains = spec.get('allowed_domains', [])
+        if self.allowed_domains is not None and not self.allowed_domains:
+            self.allowed_domains = self._get_allowed_domains(spec)
+
     def parse_login_page(self, response):
         username = response.request.meta["username"]
         password = response.request.meta["password"]
@@ -108,7 +112,7 @@ class IblSpider(SitemapSpider):
     def after_login(self, response):
         for result in self.parse(response):
             yield result
-        for req in self._start_requests():
+        for req in self._start_requests:
             yield req
 
     def get_generic_form_start_request(self, form_descriptor):
@@ -142,18 +146,19 @@ class IblSpider(SitemapSpider):
                                   dont_filter=True)
         except Exception as e:
             self.logger.warning(str(e))
-        for req in self._start_requests():
+        for req in self._start_requests:
             yield req
 
     def after_form_page(self, response):
         for result in self.parse(response):
             yield result
 
-    def _get_allowed_domains(self, templates):
-        urls = [x['url'] for x in templates]
-        # change here
-        urls += [x.url for x in self._start_requests()]
-        return [x[1] for x in iter_unique_scheme_hostname(urls)]
+    def _get_allowed_domains(self, spec):
+        urls = [x['url'] for x in spec['templates']]
+        urls += [x['url'] for x in spec.get('init_requests', [])
+                 if x['type'] == 'start']
+        urls += self._start_urls.allowed_domains
+        return [domain for scheme, domain in iter_unique_scheme_hostname(urls)]
 
     def start_requests(self):
         start_requests = []
@@ -162,7 +167,7 @@ class IblSpider(SitemapSpider):
         elif self.form_requests:
             start_requests = self.form_requests
         else:
-            start_requests = self._start_requests()
+            start_requests = self._start_requests
         for req in start_requests:
             yield req
 

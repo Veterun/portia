@@ -94,3 +94,84 @@ class StartUrlCollectionTest(TestCase):
         ]
 
         self.assertEqual(StartUrlCollection(start_urls).uniq(), start_urls)
+
+    def test_allowed_domains_with_many_fragments(self):
+        start_urls = [
+            {
+                'type': 'generated',
+                'url': 'https://github.com/[...]',
+                'fragments': [
+                    {'type': 'fixed', 'value': 'https://github.com'},
+                    {'type': 'list', 'value': '/a /b /c'},
+                    {'type': 'range', 'value': '1-10000000'},
+                ]
+            },
+        ]
+        allowed_domains = [
+            'https://github.com/a',
+            'https://github.com/b',
+            'https://github.com/c',
+        ]
+        collection_domains = StartUrlCollection(start_urls, self.generators).allowed_domains
+        self.assertEqual(set(collection_domains), set(allowed_domains))
+
+    def test_allowed_domains_with_mixed_urls(self):
+        start_urls = [
+            {
+                'type': 'generated',
+                'url': 'https://scrapinghub.com/[...]',
+                'fragments': [
+                    {'type': 'fixed', 'value': 'https://scrapinghub.com/'},
+                    {'type': 'range', 'value': '1-10000000'},
+                ]
+            },
+            {
+                'type': 'generated',
+                'url': 'https://github[1-3].com/[...]',
+                'fragments': [
+                    {'type': 'fixed', 'value': 'https://github'},
+                    {'type': 'range', 'value': '1-3'},
+                    {'type': 'fixed', 'value': '.com/'},
+                    {'type': 'range', 'value': '1-10000000'},
+                ]
+            },
+            {"type": "url", "url": "http://domain.com"},
+            'http://google.com',
+        ]
+        allowed_domains = [
+            'https://scrapinghub.com/',
+            'https://github1.com/',
+            'https://github2.com/',
+            'https://github3.com/',
+            'http://domain.com',
+            'http://google.com',
+        ]
+        collection_domains = StartUrlCollection(start_urls, self.generators).allowed_domains
+        self.assertEqual(set(collection_domains), set(allowed_domains))
+
+    def test_empty_allowed_domains(self):
+        start_urls = [
+            {
+                'type': 'generated',
+                'url': 'https://',
+                'fragments': [
+                    {'type': 'fixed', 'value': 'https://'},
+                ]
+            },
+        ]
+        collection_domains = StartUrlCollection(start_urls, self.generators).allowed_domains
+        self.assertEqual(collection_domains, [])
+
+    def test_multiple_empty_allowed_domains(self):
+        start_urls = [
+            {
+                'type': 'generated',
+                'url': 'https://',
+                'fragments': [
+                    {'type': 'fixed', 'value': 'https://'},
+                    {'type': 'fixed', 'value': 'scrapy'},
+                ]
+            },
+        ]
+        collection_domains = StartUrlCollection(start_urls, self.generators).allowed_domains
+        self.assertEqual(collection_domains, [])

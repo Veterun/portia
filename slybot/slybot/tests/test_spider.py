@@ -363,7 +363,7 @@ Product B,http://www.example.com/path2,B"""
             "http://www.example.com/p/2",
             "http://www.example.com/p/3",
             "http://www.example.com/p/4"
-        ], [r.url for r in spider._start_requests()])
+        ], [r.url for r in spider._start_requests])
 
     def test_links_to_follow(self):
         html = "<html><body><a href='http://www.example.com/link.html'>Link</a></body></html>"
