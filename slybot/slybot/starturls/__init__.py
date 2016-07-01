@@ -14,7 +14,7 @@ class StartUrlCollection(object):
     def __init__(self, start_urls, generators=None, generator_type='start_urls'):
         self.generators = generators
         self.generator_type = generator_type
-        self.start_urls = map(self._url_type, start_urls)
+        self.start_urls = [self._url_type(url) for url in start_urls]
 
     def __iter__(self):
         generated = (self._generate_urls(url) for url in self.start_urls)
@@ -27,7 +27,7 @@ class StartUrlCollection(object):
     @property
     def allowed_domains(self):
         domains = [start_url.allowed_domains for start_url in self.start_urls]
-        return list(reduce(set.union, domains, set()))
+        return list(set(chain(*domains)))
 
     def _generate_urls(self, start_url):
         generator = self.generators[start_url.generator_type]
@@ -54,27 +54,31 @@ class StartUrl(object):
     def allowed_domains(self):
         if self._has_fragments:
             return self._find_fragment_domains()
-        return set([self.spec['url']])
+        return [self.spec['url']]
 
     def _find_fragment_domains(self):
         generator = self.generators[self.generator_type]
-        fragments = generator.process_fragments(self.spec)
+        fragmentLists = generator.process_fragments(self.spec)
 
-        while len(fragments) > 0:
-            fragment = fragments.pop(0)
-            if all(self._has_domain(url) for url in fragment):
-                return set(fragment)
-            if len(fragments) == 0:
-                return set()
-            fragments[0] = self._join_fragments(product(fragment, fragments[0]))
-        return set()
+        while len(fragmentLists) > 0:
+            fragmentList = fragmentLists.pop(0)
+
+            if all(self._has_domain(fragment) for fragment in fragmentList):
+                return fragmentList
+            if len(fragmentLists) == 0:
+                return []
+
+            augmentedFirstFragments = product(fragmentList, fragmentLists[0])
+            fragmentLists[0] = self._join_fragments(augmentedFirstFragments)
+        return []
 
     def _join_fragments(self, fragments):
-        return map(lambda (a, b): ''.join([a, b]), fragments)
+        return [''.join([f, g]) for (f, g) in fragments]
 
     def _has_domain(self, url):
+        parsed_url = urlparse(url)
         methods = ['path', 'params', 'query', 'fragment']
-        return any(getattr(urlparse(url), method) != '' for method in methods)
+        return any(getattr(parsed_url, method) != '' for method in methods)
 
     @property
     def key(self):
@@ -98,4 +102,4 @@ class LegacyUrl(object):
     def allowed_domains(self):
         is_generated = self.generator_type == 'generated_urls'
         url = self.spec['template'] if is_generated else self.spec
-        return set([url])
+        return [url]
