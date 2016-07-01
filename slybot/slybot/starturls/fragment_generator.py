@@ -3,7 +3,7 @@ from itertools import product
 import six
 
 
-class GeneratedUrl(object):
+class FragmentGenerator(object):
     def _process_fixed(self, fragment):
         return [fragment]
 

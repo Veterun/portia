@@ -1,8 +1,9 @@
 from unittest import TestCase
-from slybot.starturls import GeneratedUrl
+
+from slybot.starturls import FragmentGenerator
 
 
-class GeneratedStartUrlGenerator(TestCase):
+class FragmentGeneratorTest(TestCase):
     def test_generated_url_list(self):
         github_start_urls = [
             'https://github.com/scrapinghub',
@@ -15,7 +16,7 @@ class GeneratedStartUrlGenerator(TestCase):
                 {'type': 'list', 'value': 'scrapinghub scrapy scrapy-plugins'},
             ]
         }
-        generator = GeneratedUrl()
+        generator = FragmentGenerator()
 
         self.assertEqual(list(generator(url_spec)), github_start_urls)
 
@@ -31,7 +32,7 @@ class GeneratedStartUrlGenerator(TestCase):
                 {'type': 'range', 'value': '0-2'},
             ]
         }
-        generator = GeneratedUrl()
+        generator = FragmentGenerator()
 
         self.assertEqual(list(generator(url_spec)), github_start_urls)
 
@@ -51,12 +52,13 @@ class GeneratedStartUrlGenerator(TestCase):
                 {'type': 'fixed', 'value': 'https://www.donedeal.ie/'},
                 {
                     'type': 'list',
-                    'value': 'cars-for-sale houses-for-sale pets-for-sale kitchens-for-sale'
+                    'value': ('cars-for-sale houses-for-sale '
+                              'pets-for-sale kitchens-for-sale')
                 },
                 {'type': 'fixed', 'value': '/i/'},
                 {'type': 'range', 'value': '1-2'},
             ]
         }
-        generator = GeneratedUrl()
+        generator = FragmentGenerator()
 
         self.assertEqual(list(generator(url_spec)), donedeal_start_urls)

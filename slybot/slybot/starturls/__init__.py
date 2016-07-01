@@ -6,13 +6,8 @@ from scrapy.utils.spider import arg_to_iter
 import six
 from six.moves.urllib_parse import urlparse
 
-from .generated import GeneratedUrl
-from .generator import UrlGenerator
-
-
-class StartUrls():
-    def __call__(self, spec):
-        return spec
+from .fragment_generator import FragmentGenerator
+from .generator import IdentityGenerator, UrlGenerator
 
 
 class StartUrlCollection(object):
